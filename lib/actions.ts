@@ -121,14 +121,15 @@ export async function getDashboardStats() {
       project: { members: { some: { id: userId } } }
     };
 
-    const projectCount = await prisma.project.count({ where: projectWhere });
+    const [projectCount, todo, inProgress, blocked, done] = await Promise.all([
+      prisma.project.count({ where: projectWhere }),
+      prisma.task.count({ where: { ...taskWhere, status: "TODO" } }),
+      prisma.task.count({ where: { ...taskWhere, status: "IN_PROGRESS" } }),
+      prisma.task.count({ where: { ...taskWhere, status: "BLOCKED" } }),
+      prisma.task.count({ where: { ...taskWhere, status: "DONE" } })
+    ]);
     
-    const taskStats = {
-      todo: await prisma.task.count({ where: { ...taskWhere, status: "TODO" } }),
-      inProgress: await prisma.task.count({ where: { ...taskWhere, status: "IN_PROGRESS" } }),
-      blocked: await prisma.task.count({ where: { ...taskWhere, status: "BLOCKED" } }),
-      done: await prisma.task.count({ where: { ...taskWhere, status: "DONE" } }),
-    };
+    const taskStats = { todo, inProgress, blocked, done };
 
     return { projectCount, taskStats };
   } catch (error) {

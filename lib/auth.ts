@@ -18,9 +18,22 @@ export const authOptions: NextAuthOptions = {
   session: { 
     strategy: "jwt",
   },
-  secret: process.env.NEXTAUTH_SECRET,
-  // ❌ ここにあった useSecureCookies と cookies の設定を完全に削除しました
-
+  // 🛡️ 環境変数がなくても動くようにフォールバックを設定
+  secret: process.env.NEXTAUTH_SECRET || "super-secret-nexus-12345",
+  
+  // 🚀 Codespaces等のプロキシ環境での「Cookie無限ループ」を防ぐ設定
+  cookies: {
+    sessionToken: {
+      name: "next-auth.session-token", // __Secure- プレフィックスを外して統一
+      options: {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        secure: true // Codespaces は HTTPS アクセスなので true に固定
+      }
+    }
+  },
+  
   providers: [
     CredentialsProvider({
       name: "Credentials",
