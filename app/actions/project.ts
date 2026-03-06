@@ -3,7 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 
-export async function createProject(formData: FormData) {
+export async function createProjectAction(formData: FormData) {
   const name = formData.get("name") as string;
   const description = formData.get("description") as string;
 
@@ -14,13 +14,11 @@ export async function createProject(formData: FormData) {
       data: {
         name,
         description,
-        status: "PLANNING",
-        // For now, we'll hardcode a manager ID or leave it 
-        // until we link the session, to keep it simple.
+        managerId: "system-generated-id", // スキーマの必須項目を補完
       },
     });
 
-    revalidatePath("/"); // Refresh the dashboard data
+    revalidatePath("/"); 
     return { success: true };
   } catch (e) {
     return { error: "Failed to create project" };

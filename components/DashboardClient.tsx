@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Folder, AlertCircle, Clock, Pause, Sparkles, BarChart2, ShieldAlert, Edit3, Trash2, Play } from "lucide-react";
+import { Folder, AlertCircle, Clock, Pause, Sparkles, BarChart2, ShieldAlert, Edit3, Trash2, Play, Plus } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import CreateProjectModal from "./CreateProjectModal";
 import { deleteProject } from "@/lib/actions";
@@ -102,11 +102,13 @@ export default function DashboardClient({ userName, userRole, stats, projects, a
             {projects.map((proj: any) => (
               <div key={proj.id} className="group relative bg-white/40 backdrop-blur-xl border border-white p-6 rounded-[32px] hover:shadow-xl transition-all h-[280px] flex flex-col justify-between overflow-hidden">
                 {/* 編集・削除ボタン (タイル内) */}
+                {isManager && (
                 <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-all translate-y-2 group-hover:translate-y-0">
+                  
                   <button onClick={() => { setEditProject(proj); setIsModalOpen(true); }} className="p-2 bg-white text-blue-600 rounded-xl shadow-lg hover:bg-blue-600 hover:text-white transition-all"><Edit3 size={16}/></button>
                   <button onClick={async () => { if(confirm("Terminate?")) { await deleteProject(proj.id); router.refresh(); }}} className="p-2 bg-white text-red-500 rounded-xl shadow-lg hover:bg-red-500 hover:text-white transition-all"><Trash2 size={16}/></button>
                 </div>
-
+                )}
                 <div>
                   <div className="p-3 bg-blue-100 text-blue-600 rounded-xl w-fit mb-4"><Folder size={20} /></div>
                   <h3 className="text-xl font-black text-slate-800 tracking-tight leading-tight">{proj.name}</h3>

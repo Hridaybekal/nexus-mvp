@@ -19,7 +19,8 @@ export const authOptions: NextAuthOptions = {
     strategy: "jwt",
   },
   secret: process.env.NEXTAUTH_SECRET,
-  useSecureCookies: true,
+  // ❌ ここにあった useSecureCookies と cookies の設定を完全に削除しました
+
   providers: [
     CredentialsProvider({
       name: "Credentials",
@@ -58,21 +59,10 @@ export const authOptions: NextAuthOptions = {
     },
     async session({ session, token }: any) {
       if (session.user) {
-        session.user.id = token.sub as string;
+        session.user.id = (token.id || token.sub) as string;
         (session.user as any).role = token.role;
       }
       return session;
     },
-  },
-  cookies: {
-    sessionToken: {
-      name: `__Secure-next-auth.session-token`,
-      options: {
-        httpOnly: true,
-        sameSite: 'lax',
-        path: '/',
-        secure: true
-      }
-    }
   }
 };

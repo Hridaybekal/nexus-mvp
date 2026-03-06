@@ -9,7 +9,6 @@ export default async function DashboardPage() {
 
   if (!session || !session.user) redirect("/api/auth/signin");
 
-  // サーバー側で全てのデータを並列取得
   const [stats, projectData, allUsers] = await Promise.all([
     getDashboardStats(),
     getRecentProjects(),
@@ -18,10 +17,10 @@ export default async function DashboardPage() {
 
   return (
     <DashboardClient 
-      userName={session.user.name} 
+      userName={session.user.name || "User"} 
       userRole={(session.user as any).role} 
-      stats={stats} 
-      projects={projectData.projects || []} 
+      stats={stats || { projectCount: 0, taskStats: { todo: 0, inProgress: 0, blocked: 0, done: 0 } }} 
+      projects={projectData?.projects || []} 
       allUsers={allUsers || []}
     />
   );

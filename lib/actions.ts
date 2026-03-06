@@ -14,28 +14,32 @@ import bcrypt from "bcryptjs";
 export async function createProject(formData: FormData) {
   try {
     const session = await getServerSession(authOptions);
-    if (!(session?.user as any)?.id) return { error: "Unauthorized" };
+    // 🛡️ マネージャー権限チェックを追加
+    if ((session?.user as any)?.role !== "MANAGER") return { error: "Unauthorized" };
 
     const name = formData.get("name") as string;
     const description = formData.get("description") as string;
     const drive_url = formData.get("drive_url") as string;
-    const memberIds = JSON.parse(formData.get("memberIds") as string || "[]");
-    const tasks = JSON.parse(formData.get("tasks") as string || "[]");
+    
+    let memberIds: string[] = [];
+    let tasks: any[] = [];
+    try {
+      memberIds = JSON.parse((formData.get("memberIds") as string) || "[]");
+      tasks = JSON.parse((formData.get("tasks") as string) || "[]");
+    } catch (e) {}
+
     const userId = (session.user as any).id;
 
-    const newProject = await prisma.project.create({
+    await prisma.project.create({
       data: {
         name,
         description,
         drive_url,
         managerId: userId,
-        members: {
-          connect: memberIds.map((id: string) => ({ id }))
-        },
+        members: { connect: memberIds.map((id: string) => ({ id })) },
         tasks: {
           create: tasks.map((t: any) => ({
             title: t.title,
-            description: t.description,
             priority: t.priority || "MEDIUM",
             status: "TODO"
           }))
@@ -51,24 +55,43 @@ export async function createProject(formData: FormData) {
 }
 export async function updateProject(formData: FormData) {
   try {
+    const session = await getServerSession(authOptions);
+    if ((session?.user as any)?.role !== "MANAGER") return { error: "Unauthorized" };
+
     const id = formData.get("id") as string;
     const name = formData.get("name") as string;
     const description = formData.get("description") as string;
     const drive_url = formData.get("drive_url") as string;
-    const memberIds = JSON.parse(formData.get("memberIds") as string || "[]");
+    
+    let memberIds: string[] = [];
+    let tasks: any[] = [];
+    try {
+      memberIds = JSON.parse((formData.get("memberIds") as string) || "[]");
+      tasks = JSON.parse((formData.get("tasks") as string) || "[]");
+    } catch (e) {}
 
+    // プロジェクト基本情報とメンバーの更新
     await prisma.project.update({
       where: { id },
       data: {
-        name,
-        description,
-        drive_url,
-        members: {
-          // 🛡️ Standard: This replaces the old team with the new selection
-          set: memberIds.map((id: string) => ({ id }))
-        }
+        name, description, drive_url,
+        members: { set: memberIds.map((id: string) => ({ id })) }
       }
     });
+
+    // 📋 タスクの同期 (存在しないものは削除、IDがあれば更新、なければ作成)
+    const currentTaskIds = tasks.filter((t: any) => t.id).map((t: any) => t.id);
+    await prisma.task.deleteMany({
+      where: { projectId: id, id: { notIn: currentTaskIds } }
+    });
+
+    for (const t of tasks) {
+      if (t.id) {
+        await prisma.task.update({ where: { id: t.id }, data: { title: t.title, priority: t.priority } });
+      } else {
+        await prisma.task.create({ data: { title: t.title, priority: t.priority || "MEDIUM", status: "TODO", projectId: id } });
+      }
+    }
 
     revalidatePath("/projects");
     return { success: true };
@@ -85,26 +108,21 @@ export async function updateProject(formData: FormData) {
 export async function getDashboardStats() {
   try {
     const session = await getServerSession(authOptions);
-    if (!session?.user) return null;
+    if (!(session?.user as any)?.id) return null;
 
     const userId = (session.user as any).id;
     const userRole = (session.user as any).role;
 
-    // 👔 マネージャーは全て、一般社員は自分がメンバーであるプロジェクトのみ
     const projectWhere = userRole === "MANAGER" ? {} : {
       members: { some: { id: userId } }
     };
 
-    // 👷 一般社員の場合、自分が所属するプロジェクトに紐づくタスクのみをカウント
     const taskWhere = userRole === "MANAGER" ? {} : {
-      project: {
-        members: { some: { id: userId } }
-      }
+      project: { members: { some: { id: userId } } }
     };
 
     const projectCount = await prisma.project.count({ where: projectWhere });
     
-    // タスクのステータス別カウント
     const taskStats = {
       todo: await prisma.task.count({ where: { ...taskWhere, status: "TODO" } }),
       inProgress: await prisma.task.count({ where: { ...taskWhere, status: "IN_PROGRESS" } }),
@@ -114,7 +132,6 @@ export async function getDashboardStats() {
 
     return { projectCount, taskStats };
   } catch (error) {
-    console.error("Stats Error:", error);
     return { projectCount: 0, taskStats: { todo: 0, inProgress: 0, blocked: 0, done: 0 } };
   }
 }
@@ -124,7 +141,7 @@ export async function getDashboardStats() {
 export async function getRecentProjects() {
   try {
     const session = await getServerSession(authOptions);
-    if (!session?.user) return { projects: [] };
+    if (!(session?.user as any)?.id) return { projects: [] };
 
     const userId = (session.user as any).id;
     const userRole = (session.user as any).role;
@@ -137,15 +154,10 @@ export async function getRecentProjects() {
       where: whereClause,
       orderBy: { createdAt: 'desc' },
       take: 10,
-      include: {
-        tasks: true,
-        members: true,
-        manager: true, // "Made by" 表示のために追加
-      }
+      include: { tasks: true, members: true, manager: true }
     });
     return { projects };
   } catch (error) {
-    console.error("Fetch Projects Error:", error);
     return { projects: [] };
   }
 }
@@ -224,18 +236,9 @@ export async function toggleTaskStatus(taskId: string, currentStatus: string) {
  */
 export async function deleteProject(projectId: string) {
   const session = await getServerSession(authOptions);
-  if (!session) return { error: "Unauthorized" };
+  if ((session?.user as any)?.role !== "MANAGER") return { error: "Unauthorized" };
 
   try {
-    const project = await prisma.project.findFirst({
-      where: { 
-        id: projectId,
-        managerId: (session.user as any).id 
-      }
-    });
-
-    if (!project) return { error: "You do not have permission to delete this project." };
-
     await prisma.project.delete({ where: { id: projectId } });
     revalidatePath("/projects");
     return { success: true };
