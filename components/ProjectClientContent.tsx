@@ -5,8 +5,7 @@ import { Plus, X, Folder, Edit3, Trash2, UserPlus, ListTodo, Link as LinkIcon, S
 import { createProject, updateProject, deleteProject } from "@/lib/actions";
 import { useRouter } from "next/navigation";
 
-export default function ProjectClientContent({ initialProjects, allUsers }: { initialProjects: any[], allUsers: any[] }) {
-  const router = useRouter();
+export default function ProjectClientContent({ initialProjects, allUsers, currentUser }: { initialProjects: any[], allUsers: any[], currentUser?: any }) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
   const [selectedProject, setSelectedProject] = useState<any | null>(null);

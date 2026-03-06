@@ -14,26 +14,24 @@ import bcrypt from "bcryptjs";
 export async function createProject(formData: FormData) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session?.user?.id) return { error: "Unauthorized" };
+    if (!(session?.user as any)?.id) return { error: "Unauthorized" };
 
     const name = formData.get("name") as string;
     const description = formData.get("description") as string;
     const drive_url = formData.get("drive_url") as string;
     const memberIds = JSON.parse(formData.get("memberIds") as string || "[]");
     const tasks = JSON.parse(formData.get("tasks") as string || "[]");
-    const userId = session.user.id;
+    const userId = (session.user as any).id;
 
     const newProject = await prisma.project.create({
       data: {
         name,
         description,
         drive_url,
-        managerId: session.user.id,
-        // 🛡️ Standard: Link real users in the DB
+        managerId: userId,
         members: {
           connect: memberIds.map((id: string) => ({ id }))
         },
-        // 🛡️ Standard: Create nested tasks
         tasks: {
           create: tasks.map((t: any) => ({
             title: t.title,
@@ -51,7 +49,6 @@ export async function createProject(formData: FormData) {
     return { error: "Failed to create project" };
   }
 }
-
 export async function updateProject(formData: FormData) {
   try {
     const id = formData.get("id") as string;
@@ -230,11 +227,10 @@ export async function deleteProject(projectId: string) {
   if (!session) return { error: "Unauthorized" };
 
   try {
-    // 🛡️ SECURITY: Only delete if the project belongs to THIS manager
     const project = await prisma.project.findFirst({
       where: { 
         id: projectId,
-        managerId: session.user.id 
+        managerId: (session.user as any).id 
       }
     });
 
