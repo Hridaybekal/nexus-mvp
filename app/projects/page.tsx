@@ -330,6 +330,7 @@ export default async function ProjectsPage() {
     <ProjectClientContent 
       initialProjects={projectData.projects || []} 
       allUsers={users || []} 
+      currentUser={session.user}
     />
   );
 }

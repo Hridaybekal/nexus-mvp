@@ -1,47 +1,38 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import Link from "next/link";
-import { Folder, AlertCircle, CheckCircle, Clock, Pause, Sparkles, BarChart2, ShieldAlert, Link as LinkIcon, Plus } from "lucide-react";
+import { Folder, AlertCircle, Clock, Pause, Sparkles, BarChart2, ShieldAlert, Edit3, Trash2, Play } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import CreateProjectModal from "./CreateProjectModal";
+import { deleteProject } from "@/lib/actions";
+import { useRouter } from "next/navigation";
 
-
-
-export default function DashboardClient({ userName, userRole, stats, projects }: any) {
+export default function DashboardClient({ userName, userRole, stats, projects, allUsers }: any) {
+  const router = useRouter();
   const [isModalOpen, setIsModalOpen] = useState(false);
-    const [seconds, setSeconds] = useState(0);
+  const [editProject, setEditProject] = useState<any>(null);
+  const [seconds, setSeconds] = useState(0);
   const [isTimerRunning, setIsTimerRunning] = useState(false);
-  const [isLoaded, setIsLoaded] = useState(false);
-
   const isManager = userRole === "MANAGER";
-  const activeProject = projects[0]; // The most recent project
 
-  // Timer Logic
+  // タイマーロジック (社員のみ)
   useEffect(() => {
+    if (isManager) return;
     const savedTime = localStorage.getItem("nexus_timer");
-    const savedState = localStorage.getItem("nexus_timer_running");
     if (savedTime) setSeconds(parseInt(savedTime, 10));
-    if (savedState === "true") setIsTimerRunning(true);
-    setIsLoaded(true);
-  }, []);
+  }, [isManager]);
 
   useEffect(() => {
-    let interval: any;
-    if (isTimerRunning && isLoaded) {
-      interval = setInterval(() => {
-        setSeconds((prev) => {
-          const newTime = prev + 1;
-          localStorage.setItem("nexus_timer", newTime.toString());
-          return newTime;
-        });
-      }, 1000);
-      localStorage.setItem("nexus_timer_running", "true");
-    } else if (isLoaded) {
-      localStorage.setItem("nexus_timer_running", "false");
-    }
+    if (isManager || !isTimerRunning) return;
+    const interval = setInterval(() => {
+      setSeconds(prev => {
+        const next = prev + 1;
+        localStorage.setItem("nexus_timer", next.toString());
+        return next;
+      });
+    }, 1000);
     return () => clearInterval(interval);
-  }, [isTimerRunning, isLoaded]);
+  }, [isTimerRunning, isManager]);
 
   const formatTime = (s: number) => {
     const h = Math.floor(s / 3600).toString().padStart(2, '0');
@@ -50,114 +41,99 @@ export default function DashboardClient({ userName, userRole, stats, projects }:
     return `${h}:${m}:${sec}`;
   };
 
-  if (!isLoaded) return null;
-
   return (
     <div className="max-w-7xl mx-auto pb-12">
-      {/* 3. Add the Modal component at the bottom of the JSX */}
-      <CreateProjectModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
+      <CreateProjectModal 
+        isOpen={isModalOpen} 
+        onClose={() => { setIsModalOpen(false); setEditProject(null); }} 
+        allUsers={allUsers} 
+        editProject={editProject}
+      />
 
       <div className="flex justify-between items-end mb-10">
-        <div>{/* Title logic */}</div>
-        
-        {/* 4. Update the Button to open the modal */}
+        <div>
+          <p className="text-xs font-black text-blue-600 uppercase tracking-widest mb-1">{isManager ? "Strategy" : "Ops"}</p>
+          <h1 className="text-4xl font-black text-slate-900 tracking-tighter italic">{isManager ? "Management Overview" : `Welcome back, ${userName.split(' ')[0]}`}</h1>
+        </div>
         {isManager && (
-          <button 
-            onClick={() => setIsModalOpen(true)}
-            className="px-6 py-3 bg-blue-600 text-white rounded-2xl font-black text-sm shadow-xl flex items-center gap-2 hover:bg-blue-700 transition-all"
-          >
-            <Plus size={18} strokeWidth={3} /> Launch New Project
+          <button onClick={() => { setEditProject(null); setIsModalOpen(true); }} className="px-6 py-3 bg-slate-900 text-white rounded-2xl font-black text-sm flex items-center gap-2 hover:bg-blue-600 transition-all">
+            <Plus size={18} /> Launch Mission
           </button>
         )}
       </div>
-    <div className="max-w-7xl mx-auto pb-12 animate-in fade-in duration-700">
-      {/* Header */}
-      <div className="flex justify-between items-end mb-10">
-        <div>
-          <p className="text-sm font-black text-blue-600/80 uppercase tracking-widest mb-1">
-            {isManager ? "Command Center" : "Workspace"}
-          </p>
-          <h1 className="text-4xl font-black text-slate-900 tracking-tight">
-            {isManager ? "Manager Overview" : `Welcome back, ${userName.split(' ')[0]}`}
-          </h1>
-        </div>
-        <Link href={isManager ? "/nippo" : "/tasks"} className="px-6 py-3 bg-blue-600 text-white rounded-2xl font-black text-sm shadow-xl shadow-blue-500/30 hover:-translate-y-1 transition-all flex items-center gap-2">
-          {isManager ? <><Sparkles size={18} /> AI Report</> : "View My Tasks"}
-        </Link>
-      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-        {/* Main Content Area */}
         <div className="lg:col-span-8 space-y-8">
+          {/* マネージャーにはグラフ、社員にはタイマーを表示 */}
           {isManager ? (
-            // MANAGER CHART
-            <div className="bg-white/40 backdrop-blur-xl border border-white/60 p-8 rounded-[32px] shadow-sm">
-              <h3 className="text-xl font-black text-slate-800 mb-6 flex items-center gap-2"><BarChart2 /> Task Distribution</h3>
-              <div className="h-72 w-full">
+            <div className="bg-white/40 backdrop-blur-xl border border-white p-8 rounded-[40px] shadow-sm">
+              <h3 className="text-xl font-black text-slate-800 mb-8 flex items-center gap-2 italic"><BarChart2 className="text-blue-500" /> Global Velocity</h3>
+              <div className="h-64 w-full">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={[
-                    { name: "To Do", value: stats.taskStats.todo, color: "#f97316" },
-                    { name: "In Progress", value: stats.taskStats.inProgress, color: "#3b82f6" },
-                    { name: "Blocked", value: stats.taskStats.blocked, color: "#ef4444" },
-                    { name: "Done", value: stats.taskStats.done, color: "#10b981" },
+                    { name: "To Do", value: stats?.taskStats?.todo || 0, color: "#94a3b8" },
+                    { name: "Active", value: stats?.taskStats?.inProgress || 0, color: "#3b82f6" },
+                    { name: "Blocked", value: stats?.taskStats?.blocked || 0, color: "#ef4444" },
+                    { name: "Done", value: stats?.taskStats?.done || 0, color: "#10b981" },
                   ]}>
-                    <XAxis dataKey="name" axisLine={false} tickLine={false} />
-                    <YAxis axisLine={false} tickLine={false} />
+                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 10, fontWeight: 900}} />
                     <Tooltip cursor={{fill: 'transparent'}} />
-                    <Bar dataKey="value" radius={[10, 10, 0, 0]}>
-                      <Cell fill="#f97316"/><Cell fill="#3b82f6"/><Cell fill="#ef4444"/><Cell fill="#10b981"/>
+                    <Bar dataKey="value" radius={[10, 10, 0, 0]} barSize={50}>
+                      <Cell fill="#94a3b8"/><Cell fill="#3b82f6"/><Cell fill="#ef4444"/><Cell fill="#10b981"/>
                     </Bar>
                   </BarChart>
                 </ResponsiveContainer>
               </div>
             </div>
           ) : (
-            // EMPLOYEE TIMER & ACTIVE PROJECT
-            <>
-              <div className="bg-gradient-to-br from-blue-900 to-indigo-900 rounded-[40px] p-10 text-white shadow-2xl border border-white/20">
-                <div className="text-7xl font-mono font-light tracking-widest mb-8">{formatTime(seconds)}</div>
-                <div className="flex gap-4">
-                  <button onClick={() => setIsTimerRunning(!isTimerRunning)} className="px-8 py-3 bg-white/10 rounded-2xl font-black text-sm flex items-center gap-2 hover:bg-white/20 transition-all">
-                    <Pause size={18} fill="currentColor" /> {isTimerRunning ? 'Pause' : 'Resume'}
-                  </button>
+            <div className="bg-slate-900 rounded-[40px] p-10 text-white shadow-2xl relative overflow-hidden">
+              <div className="relative z-10">
+                <div className="text-[10px] font-black uppercase text-blue-400 mb-4 tracking-widest">Active Focus Session</div>
+                <div className="text-7xl font-mono font-light tracking-tighter mb-8">{formatTime(seconds)}</div>
+                <button onClick={() => setIsTimerRunning(!isTimerRunning)} className="px-8 py-3 bg-blue-600 rounded-xl font-black text-sm flex items-center gap-2">
+                  {isTimerRunning ? <Pause size={18} fill="white" /> : <Play size={18} fill="white" />} {isTimerRunning ? 'Pause' : 'Start'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* プロジェクトリスト表示部分 */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {projects.map((proj: any) => (
+              <div key={proj.id} className="group relative bg-white/40 backdrop-blur-xl border border-white p-6 rounded-[32px] hover:shadow-xl transition-all h-[280px] flex flex-col justify-between overflow-hidden">
+                {/* 編集・削除ボタン (タイル内) */}
+                <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-all translate-y-2 group-hover:translate-y-0">
+                  <button onClick={() => { setEditProject(proj); setIsModalOpen(true); }} className="p-2 bg-white text-blue-600 rounded-xl shadow-lg hover:bg-blue-600 hover:text-white transition-all"><Edit3 size={16}/></button>
+                  <button onClick={async () => { if(confirm("Terminate?")) { await deleteProject(proj.id); router.refresh(); }}} className="p-2 bg-white text-red-500 rounded-xl shadow-lg hover:bg-red-500 hover:text-white transition-all"><Trash2 size={16}/></button>
+                </div>
+
+                <div>
+                  <div className="p-3 bg-blue-100 text-blue-600 rounded-xl w-fit mb-4"><Folder size={20} /></div>
+                  <h3 className="text-xl font-black text-slate-800 tracking-tight leading-tight">{proj.name}</h3>
+                  <p className="text-[10px] font-black text-blue-500 uppercase mt-1">Made by {proj.manager?.name || "Admin"}</p>
+                </div>
+
+                <div className="flex -space-x-2">
+                  {proj.members?.slice(0, 3).map((m: any) => (
+                    <img key={m.id} src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${m.name}`} className="w-8 h-8 rounded-full border-2 border-white shadow-sm" title={m.name} />
+                  ))}
                 </div>
               </div>
-
-              {activeProject && (
-                <div className="bg-white/40 backdrop-blur-xl border border-white/60 p-8 rounded-[32px] shadow-sm">
-                  <div className="flex justify-between items-start mb-4">
-                    <h3 className="text-xl font-black text-slate-800">Current Assignment: {activeProject.name}</h3>
-                    {activeProject.drive_url && (
-                      <a href={activeProject.drive_url} target="_blank" className="text-blue-600 font-bold text-xs flex items-center gap-1 hover:underline">
-                        <LinkIcon size={14} /> Drive
-                      </a>
-                    )}
-                  </div>
-                  <p className="text-slate-600 text-sm leading-relaxed">{activeProject.description || "No description provided."}</p>
-                </div>
-              )}
-            </>
-          )}
+            ))}
+          </div>
         </div>
 
-        {/* Sidebar Stats */}
-        <div className="lg:col-span-4 space-y-6">
-          <StatCard title={isManager ? "Active Projects" : "My Tasks"} value={isManager ? stats.projectCount : (stats.taskStats.todo + stats.taskStats.inProgress)} icon={<Folder />} />
-          <StatCard title="Blocked" value={stats.taskStats.blocked} icon={<ShieldAlert />} color="text-red-500" />
+        {/* 右サイドのアクティビティフィード (現状ダミー) */}
+        <div className="lg:col-span-4 h-full">
+           <div className="bg-white/40 backdrop-blur-xl border border-white rounded-[40px] h-[600px] flex flex-col p-8 shadow-sm">
+             <h3 className="text-lg font-black text-slate-800 mb-6 italic">Intelligence Feed</h3>
+             <div className="flex-1 flex flex-col items-center justify-center opacity-30 text-center">
+               <AlertCircle size={40} className="mb-4" />
+               <p className="text-[10px] font-black uppercase tracking-widest">No Recent Activity</p>
+             </div>
+           </div>
         </div>
       </div>
     </div>
-</div>
   );
 }
-
-function StatCard({ title, value, icon, color }: any) {
-  return (
-    <div className="bg-white/40 backdrop-blur-xl rounded-[32px] p-8 border border-white/60 shadow-sm">
-      <div className="text-blue-600 mb-4">{icon}</div>
-      <p className="text-slate-500 font-bold text-xs uppercase mb-1">{title}</p>
-      <h2 className={`text-5xl font-black text-slate-900 ${color}`}>{value}</h2>
-    </div>
-  );
-}
-

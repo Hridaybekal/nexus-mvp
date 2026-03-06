@@ -262,12 +262,13 @@ import { redirect } from "next/navigation";
 export default async function DashboardPage() {
   const session = await getServerSession(authOptions);
 
-  if (!session) redirect("/api/auth/signin");
+  if (!session || !session.user) redirect("/api/auth/signin");
 
   // 🚀 FETCH DATA ON SERVER - No more loading loops!
   const [stats, projectData] = await Promise.all([
     getDashboardStats(),
-    getRecentProjects()
+    getRecentProjects(),
+    getAllUsers(),
   ]);
 
   return (
@@ -276,6 +277,7 @@ export default async function DashboardPage() {
       userRole={(session.user as any).role} 
       stats={stats} 
       projects={projectData.projects} 
+      allUsers={allUsers || []}
     />
   );
 }

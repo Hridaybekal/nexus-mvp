@@ -14,13 +14,14 @@ import bcrypt from "bcryptjs";
 export async function createProject(formData: FormData) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session) return { error: "Unauthorized" };
+    if (!session?.user?.id) return { error: "Unauthorized" };
 
     const name = formData.get("name") as string;
     const description = formData.get("description") as string;
     const drive_url = formData.get("drive_url") as string;
     const memberIds = JSON.parse(formData.get("memberIds") as string || "[]");
     const tasks = JSON.parse(formData.get("tasks") as string || "[]");
+    const userId = session.user.id;
 
     const newProject = await prisma.project.create({
       data: {
@@ -82,6 +83,8 @@ export async function updateProject(formData: FormData) {
 /**
  * 📊 2. FETCH DASHBOARD STATS (For the Graph)
  */
+// lib/actions.ts
+
 export async function getDashboardStats() {
   try {
     const session = await getServerSession(authOptions);
@@ -90,19 +93,26 @@ export async function getDashboardStats() {
     const userId = (session.user as any).id;
     const userRole = (session.user as any).role;
 
-    // 👔 If Manager, see everything. 👷 If Employee, see only YOURS.
-    const whereClause = userRole === "MANAGER" ? {} : {
+    // 👔 マネージャーは全て、一般社員は自分がメンバーであるプロジェクトのみ
+    const projectWhere = userRole === "MANAGER" ? {} : {
       members: { some: { id: userId } }
     };
 
-    const projectCount = await prisma.project.count({ where: whereClause });
+    // 👷 一般社員の場合、自分が所属するプロジェクトに紐づくタスクのみをカウント
+    const taskWhere = userRole === "MANAGER" ? {} : {
+      project: {
+        members: { some: { id: userId } }
+      }
+    };
+
+    const projectCount = await prisma.project.count({ where: projectWhere });
     
-    // Count tasks assigned specifically to this user
+    // タスクのステータス別カウント
     const taskStats = {
-      todo: await prisma.task.count({ where: { ...whereClause, status: "TODO" } }),
-      inProgress: await prisma.task.count({ where: { ...whereClause, status: "IN_PROGRESS" } }),
-      blocked: await prisma.task.count({ where: { ...whereClause, status: "BLOCKED" } }),
-      done: await prisma.task.count({ where: { ...whereClause, status: "DONE" } }),
+      todo: await prisma.task.count({ where: { ...taskWhere, status: "TODO" } }),
+      inProgress: await prisma.task.count({ where: { ...taskWhere, status: "IN_PROGRESS" } }),
+      blocked: await prisma.task.count({ where: { ...taskWhere, status: "BLOCKED" } }),
+      done: await prisma.task.count({ where: { ...taskWhere, status: "DONE" } }),
     };
 
     return { projectCount, taskStats };
@@ -111,17 +121,29 @@ export async function getDashboardStats() {
     return { projectCount: 0, taskStats: { todo: 0, inProgress: 0, blocked: 0, done: 0 } };
   }
 }
-
 /**
  * 📂 3. FETCH RECENT PROJECTS (Now includes Tasks!)
  */
 export async function getRecentProjects() {
   try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user) return { projects: [] };
+
+    const userId = (session.user as any).id;
+    const userRole = (session.user as any).role;
+
+    const whereClause = userRole === "MANAGER" ? {} : {
+      members: { some: { id: userId } }
+    };
+
     const projects = await prisma.project.findMany({
+      where: whereClause,
       orderBy: { createdAt: 'desc' },
       take: 10,
       include: {
-        tasks: true, // 👈 This tells Prisma to fetch the tasks inside the project!
+        tasks: true,
+        members: true,
+        manager: true, // "Made by" 表示のために追加
       }
     });
     return { projects };
@@ -130,7 +152,6 @@ export async function getRecentProjects() {
     return { projects: [] };
   }
 }
-
 /**
  * 📝 4. UPDATE FULL PROJECT (Now handles Members & New Tasks)
  */
@@ -289,3 +310,4 @@ export async function generateTasksFromAI(notes: string) {
     { title: "Schedule team sync", priority: "LOW" }
   ];
 }
+
