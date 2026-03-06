@@ -13,27 +13,47 @@ declare module "next-auth" {
   }
 }
 
+// 🚀 Detect if we are in Codespaces (or production)
+const useSecureCookies = process.env.NEXTAUTH_URL?.startsWith("https://");
+
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma) as any,
   session: { 
     strategy: "jwt",
   },
-  // 🛡️ 環境変数がなくても動くようにフォールバックを設定
-  secret: process.env.NEXTAUTH_SECRET || "super-secret-nexus-12345",
+  secret: process.env.NEXTAUTH_SECRET,
   
-  // 🚀 Codespaces等のプロキシ環境での「Cookie無限ループ」を防ぐ設定
+  // 🛡️ Force cookies to work across the Codespaces proxy
+  useSecureCookies,
   cookies: {
     sessionToken: {
-      name: "next-auth.session-token", // __Secure- プレフィックスを外して統一
+      name: useSecureCookies ? "__Secure-next-auth.session-token" : "next-auth.session-token",
       options: {
         httpOnly: true,
-        sameSite: "lax",
+        sameSite: "none", // 👈 THIS IS THE MAGIC FIX FOR CODESPACES
         path: "/",
-        secure: true // Codespaces は HTTPS アクセスなので true に固定
+        secure: useSecureCookies
       }
-    }
+    },
+    callbackUrl: {
+      name: useSecureCookies ? "__Secure-next-auth.callback-url" : "next-auth.callback-url",
+      options: {
+        sameSite: "none", // 👈 MAGIC FIX
+        path: "/",
+        secure: useSecureCookies
+      }
+    },
+    csrfToken: {
+      name: useSecureCookies ? "__Host-next-auth.csrf-token" : "next-auth.csrf-token",
+      options: {
+        httpOnly: true,
+        sameSite: "none", // 👈 MAGIC FIX
+        path: "/",
+        secure: useSecureCookies
+      }
+    },
   },
-  
+
   providers: [
     CredentialsProvider({
       name: "Credentials",
@@ -79,3 +99,79 @@ export const authOptions: NextAuthOptions = {
     },
   }
 };
+
+
+
+// import CredentialsProvider from "next-auth/providers/credentials";
+// import { PrismaAdapter } from "@auth/prisma-adapter";
+// import { prisma } from "@/lib/prisma";
+// import bcrypt from "bcryptjs";
+// import { NextAuthOptions, DefaultSession } from "next-auth";
+
+// declare module "next-auth" {
+//   interface Session {
+//     user: {
+//       id: string;
+//       role: string;
+//     } & DefaultSession["user"]
+//   }
+// }
+
+// export const authOptions: NextAuthOptions = {
+//   adapter: PrismaAdapter(prisma) as any,
+//   session: { 
+//     strategy: "jwt",
+//   },
+//   secret: process.env.NEXTAUTH_SECRET,
+//   providers: [
+//     CredentialsProvider({
+//       name: "Credentials",
+//       credentials: {
+//         email: { label: "Email", type: "email" },
+//         password: { label: "Password", type: "password" }
+//       },
+//       async authorize(credentials) {
+//         if (!credentials?.email || !credentials?.password) {
+//           return null;
+//         }
+        
+//         const user = await prisma.user.findUnique({
+//           where: { email: credentials.email }
+//         });
+
+//         if (!user || !user.password_hash) {
+//           return null;
+//         }
+
+//         const isValid = await bcrypt.compare(credentials.password, user.password_hash);
+        
+//         if (!isValid) {
+//           return null;
+//         }
+
+//         return {
+//           id: user.id,
+//           email: user.email,
+//           name: user.name,
+//           role: user.role, 
+//         };
+//       }
+//     })
+//   ],
+//   callbacks: {
+//     async jwt({ token, user }: any) {
+//       if (user) {
+//         token.id = user.id;
+//         token.role = user.role;
+//       }
+//       return token;
+//     },
+//     async session({ session, token }: any) {
+//       if (session.user) {
+//         session.user.id = (token.id || token.sub) as string;
+//         (session.user as any).role = token.role;
+//       }
+//       return session;
+//     },
+//   }
+// };
